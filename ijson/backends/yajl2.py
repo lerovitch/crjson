@@ -7,9 +7,8 @@ from ctypes import Structure, c_uint, c_ubyte, c_int, c_long, c_double, \
                    cdll, util, c_char
 from decimal import Decimal
 
-from ijson import common, backends
+from ijson import common, backends, utils
 from ijson.compat import b2s
-
 
 yajl = backends.find_yajl(2)
 
@@ -65,10 +64,11 @@ YAJL_ALLOW_COMMENTS = 1
 YAJL_MULTIPLE_VALUES = 8
 
 
-def basic_parse(f, allow_comments=False, buf_size=64 * 1024,
+@utils.coroutine
+def basic_parse(target, allow_comments=False, buf_size=64 * 1024,
                 multiple_values=False):
     '''
-    Iterator yielding unprefixed events.
+    consumes data from a source, yields events parsed (event, value)
 
     Parameters:
 
@@ -93,35 +93,64 @@ def basic_parse(f, allow_comments=False, buf_size=64 * 1024,
         yajl.yajl_config(handle, YAJL_MULTIPLE_VALUES, 1)
     try:
         while True:
-            buffer = f.read(buf_size)
-            if buffer:
+            try:
+                buffer = (yield)
                 result = yajl.yajl_parse(handle, buffer, len(buffer))
-            else:
+            except GeneratorExit:
                 result = yajl.yajl_complete_parse(handle)
-            if result == YAJL_ERROR:
-                perror = yajl.yajl_get_error(handle, 1, buffer, len(buffer))
-                error = cast(perror, c_char_p).value
-                yajl.yajl_free_error(handle, perror)
-                raise common.JSONError(error)
-            if not buffer and not events:
-                if result == YAJL_INSUFFICIENT_DATA:
-                    raise common.IncompleteJSONError()
-                break
+                raise
+            finally:
+                if result == YAJL_ERROR:
+                    perror = yajl.yajl_get_error(handle, 1, buffer, len(buffer))
+                    error = cast(perror, c_char_p).value
+                    yajl.yajl_free_error(handle, perror)
+                    raise common.JSONError(error)
+                if not buffer and not events:
+                    if result == YAJL_INSUFFICIENT_DATA:
+                        raise common.IncompleteJSONError()
+                    break
 
-            for event in events:
-                yield event
-            events = []
+                for event in events:
+                    target.send(event)
+                events = []
     finally:
         yajl.yajl_free(handle)
 
-def parse(file, **kwargs):
-    '''
-    Backend-specific wrapper for ijson.common.parse.
-    '''
-    return common.parse(basic_parse(file, **kwargs))
 
-def items(file, prefix):
+#def parse(file, **kwargs):
+#    '''
+#    Backend-specific wrapper for ijson.common.parse.
+#    '''
+#    return common.parse(basic_parse(file, **kwargs))
+#
+#
+#def items(file, prefix):
+#    '''
+#    Backend-specific wrapper for ijson.common.items.
+#    '''
+#    return common.items(parse(file), prefix)
+
+
+def parse(events_cr, **kwargs):
+    '''
+    Backend-specific wrapper for ijson.common.i_parse.
+    '''
+    return basic_parse(common.i_parse(events_cr), **kwargs)
+
+
+def items(prefix, target, **kwargs):
     '''
     Backend-specific wrapper for ijson.common.items.
     '''
-    return common.items(parse(file), prefix)
+    return parse(common.i_items(prefix, target))
+
+
+
+    
+###
+#  basic_parser -> generator d'events (event, value)
+#  common.parser -> consumer d'events (event, value) / generator de  (prefix, event, value)  
+#  parse -> retorna el generador d common.parser
+#  common.items -> consumeix i genera items   
+#  items -> retorna el commons.items
+

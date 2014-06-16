@@ -4,11 +4,14 @@ import unittest
 from io import BytesIO
 from decimal import Decimal
 import threading
+import contextlib
 from importlib import import_module
 
 from ijson import common
+from ijson.backends import yajl2
 from ijson.backends.python import basic_parse
 from ijson.compat import IS_PY2
+from ijson.utils import coroutine
 
 
 JSON = b'''
@@ -146,8 +149,41 @@ class Parse(object):
         self.backend.basic_parse(BytesIO(INVALID_JSON))
         self.assertTrue(True)
 
+
+class Yajl2Parse(unittest.TestCase):
+
+    backend = yajl2
+
+    @coroutine
+    def sink(self, rs):
+        try:
+            while True:
+                data = (yield)
+                rs.append(data)
+        except GeneratorExit:
+            pass
+
+    def test_scalar(self):
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                parser.send(BytesIO(SCALAR_JSON).read())
+        self.assertEqual(events, [('number', 0)])
+
+    def test_strings(self):
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                parser.send(BytesIO(STRINGS_JSON).read())
+        strings = [value for event, value in events if event == 'string']
+        self.assertEqual(strings, ['', '"', '\\', '\\\\'])
+
+
+
+
+
 # Generating real TestCase classes for each importable backend
-for name in ['python', 'yajl', 'yajl2']:
+for name in ['python', 'yajl']:
     try:
         classname = '%sParse' % name.capitalize()
         if IS_PY2:
@@ -198,7 +234,7 @@ class Common(unittest.TestCase):
             builder.event(event, value)
         self.assertEqual(builder.value, 0)
 
-    def test_parse(self):
+    def test_parse(self):       
         events = common.parse(basic_parse(BytesIO(JSON)))
         events = [value
             for prefix, event, value in events
@@ -214,6 +250,33 @@ class Common(unittest.TestCase):
             {'key': 'value'},
             None,
         ])
+
+    #def test_i_items(self):
+    #    pt_1 = JSON[:len(JSON) / 2]
+    #    pt_2 = JSON[len(JSON) / 2:]
+
+    #    meta = []
+    #    def sink(rs):
+    #        try:
+    #            while True:
+    #                data = (yield)
+    #                rs.append(data)
+    #        except GeneratorExit:
+    #            pass
+
+    #    sink = sink(meta)
+    #    sink.next()
+
+    #    events = i_items('docs.item.meta', sink)
+    #    events.send(pt_1)
+    #    events.send(pt_2)
+    #    events.close()
+
+    #    self.assertEqual(meta, [
+    #        [[1], {}],
+    #        {'key': 'value'},
+    #        None,
+    #    ])
 
 
 if __name__ == '__main__':
