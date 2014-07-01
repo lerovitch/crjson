@@ -2,7 +2,12 @@
 ijson
 =====
 
-Ijson is an iterative JSON parser with a standard Python iterator interface.
+Ijson is an iterative JSON parser using Python couroutines interface.
+
+It is a fork from  `Ivan Sagalaev <https://github.com/isagalaev>` library that justs rethinks the 
+flow from a generator library to a coroutine library.
+
+The main point of it is to allowing better integration with long results
 
 
 Usage
@@ -29,30 +34,47 @@ Most common usage is having ijson yield native Python objects out of a JSON
 stream located under a prefix. Here's how to process all European cities::
 
     import ijson
+    import contextlib
 
-    f = urlopen('http://.../')
-    objects = ijson.items(f, 'earth.europe.item')
+    @ijson.util    
+    def sink(rs):
+        try:
+            while True:
+                data = (yield)
+                rs.append(data)
+        except GeneratorExit:
+            pass
+
+    def reader(fp, target):
+        while True:
+            data = fp.read()
+            if not data:
+                break
+            target.send(data)
+
+    objects = []
+
+    from io import BytesIO
+    f = BytesIO(b'''    {
+              "earth": {
+                "europe": [
+            {"name": "Paris", "type": "city", "info": { "more": 1}},
+            {"name": "Thames", "type": "river", "info": { "more": 2}}
+                ],
+                "america": [
+            {"name": "Texas", "type": "state", "info": { "more": 3}}
+                ]
+              }
+            }
+        ''')
+
+    with contextlib.closing(sink(objects)) as sink_cr:
+        with contextlib.closing(ijson.items('earth.europe.item', sink_cr)) as parser:
+            reader(f, parser)
+
     cities = (o for o in objects if o['type'] == 'city')
-    for city in cities:
-        do_something_with(city)
-
-Sometimes when dealing with a particularly large JSON payload it may worth to
-not even construct individual Python objects and react on individual events
-immediately producing some result::
-
-    import ijson
-
-    parser = ijson.parse(urlopen('http://.../'))
-    stream.write('<geo>')
-    for prefix, event, value in parser:
-        if (prefix, event) == ('earth', 'map_key'):
-            stream.write('<%s>' % value)
-            continent = value
-        elif prefix.endswith('.name'):
-            stream.write('<object name="%s"/>' % value)
-        elif (prefix, event) == ('earth.%s' % continent, 'end_map'):
-            stream.write('</%s>' % continent)
-    stream.write('</geo>')
+        for city in cities:
+            print city
 
 
 Backends
@@ -63,19 +85,17 @@ backends located in ijson/backends:
 
 - ``yajl2``: wrapper around `YAJL <http://lloyd.github.com/yajl/>`_ version 2.x
 - ``yajl``: wrapper around `YAJL <http://lloyd.github.com/yajl/>`_ version 1.x
-- ``python``: pure Python parser (good to use under PyPy)
 
 You can import a specific backend and use it in the same way as the top level
 library::
 
-    import ijson.backends.python as ijson
+    import ijson.backends.yajl as ijson
 
     for item in ijson.items(...):
         # ...
 
 Importing the top level library as ``import ijson`` tries to import all backends
-in order, so it either finds an appropriate version of YAJL or falls back to the
-Python backend if none is found.
+in order, so it either finds an appropriate version of YAJL.
 
 
 Acknowledgements
