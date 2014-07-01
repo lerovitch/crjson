@@ -50,6 +50,7 @@ STRINGS_JSON = br'''
     "str4": "\\\\"
 }
 '''
+LIST_JSON = '''[{"id": 5}, {"id": 7}]'''
 
 class Parse(object):
     '''
@@ -178,8 +179,16 @@ class Yajl2Parse(unittest.TestCase):
         strings = [value for event, value in events if event == 'string']
         self.assertEqual(strings, ['', '"', '\\', '\\\\'])
 
+    def test_i_items(self):
 
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(self.backend.items('item', sink_cr)) as parser:
+                parser.send(LIST_JSON[:len(LIST_JSON) / 2])
+                parser.send(LIST_JSON[len(LIST_JSON) / 2:])
 
+        print events
+        import pdb; pdb.set_trace()
 
 
 # Generating real TestCase classes for each importable backend
@@ -195,6 +204,7 @@ for name in ['python', 'yajl']:
         )
     except ImportError:
         pass
+
 
 class Common(unittest.TestCase):
     '''
@@ -251,33 +261,6 @@ class Common(unittest.TestCase):
             None,
         ])
 
-    #def test_i_items(self):
-    #    pt_1 = JSON[:len(JSON) / 2]
-    #    pt_2 = JSON[len(JSON) / 2:]
-
-    #    meta = []
-    #    def sink(rs):
-    #        try:
-    #            while True:
-    #                data = (yield)
-    #                rs.append(data)
-    #        except GeneratorExit:
-    #            pass
-
-    #    sink = sink(meta)
-    #    sink.next()
-
-    #    events = i_items('docs.item.meta', sink)
-    #    events.send(pt_1)
-    #    events.send(pt_2)
-    #    events.close()
-
-    #    self.assertEqual(meta, [
-    #        [[1], {}],
-    #        {'key': 'value'},
-    #        None,
-    #    ])
-
-
+ 
 if __name__ == '__main__':
     unittest.main()

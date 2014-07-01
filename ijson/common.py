@@ -224,6 +224,7 @@ def i_items(prefix, target):
     while True:
         rcv = (yield)
         current, event, value = rcv
+        print current, event, value
         if current == prefix:
             if event in ('start_map', 'start_array'):
                 builder = ObjectBuilder()
