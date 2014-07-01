@@ -91,35 +91,39 @@ def basic_parse(f, allow_comments=False, check_utf8=False, buf_size=64 * 1024):
     handle = yajl.yajl_alloc(byref(callbacks), byref(config), None, None)
     try:
         while True:
-            buffer = f.read(buf_size)
-            if buffer:
+            try:
+                buffer = (yield)
                 result = yajl.yajl_parse(handle, buffer, len(buffer))
-            else:
-                result = yajl.yajl_parse_complete(handle)
-            if result == YAJL_ERROR:
-                perror = yajl.yajl_get_error(handle, 1, buffer, len(buffer))
-                error = cast(perror, c_char_p).value
-                yajl.yajl_free_error(handle, perror)
-                raise common.JSONError(error)
-            if not buffer and not events:
-                if result == YAJL_INSUFFICIENT_DATA:
-                    raise common.IncompleteJSONError()
-                break
+            except GeneratorExit:
+                result = yajl.yajl_complete_parse(handle)
+                raise
+            finally:
+                if result == YAJL_ERROR:
+                    perror = yajl.yajl_get_error(handle, 1, buffer, len(buffer))
+                    error = cast(perror, c_char_p).value
+                    yajl.yajl_free_error(handle, perror)
+                    raise common.JSONError(error)
+                if not buffer and not events:
+                    if result == YAJL_INSUFFICIENT_DATA:
+                        raise common.IncompleteJSONError()
+                    break
 
-            for event in events:
-                yield event
-            events = []
+                for event in events:
+                    yield event
+                events = []
     finally:
         yajl.yajl_free(handle)
 
-def parse(file, **kwargs):
+
+def parse(events_cr, **kwargs):
     '''
     Backend-specific wrapper for ijson.common.parse.
     '''
-    return common.parse(basic_parse(file, **kwargs))
+    return basic_parse(common.parse(events_cr), **kwargs)
 
-def items(file, prefix):
+
+def items(prefix, target, **kwargs):
     '''
     Backend-specific wrapper for ijson.common.items.
     '''
-    return common.items(parse(file), prefix)
+    return parse(common.items(prefix, target))

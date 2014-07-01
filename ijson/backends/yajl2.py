@@ -72,10 +72,10 @@ def basic_parse(target, allow_comments=False, buf_size=64 * 1024,
 
     Parameters:
 
-    - f: a readable file-like object with JSON input
-    - allow_comments: tells parser to allow comments in JSON input
-    - buf_size: a size of an input buffer
-    - multiple_values: allows the parser to parse multiple JSON objects
+    :param target: a readable file-like object with JSON input
+    :param allow_comments: tells parser to allow comments in JSON input
+    :param buf_size: a size of an input buffer
+    :param multiple_values: allows the parser to parse multiple JSON objects
     '''
     events = []
 
@@ -96,6 +96,7 @@ def basic_parse(target, allow_comments=False, buf_size=64 * 1024,
             try:
                 buffer = (yield)
                 result = yajl.yajl_parse(handle, buffer, len(buffer))
+                buffer = []
             except GeneratorExit:
                 result = yajl.yajl_complete_parse(handle)
                 raise
@@ -108,7 +109,6 @@ def basic_parse(target, allow_comments=False, buf_size=64 * 1024,
                 if not buffer and not events:
                     if result == YAJL_INSUFFICIENT_DATA:
                         raise common.IncompleteJSONError()
-                    break
 
                 for event in events:
                     target.send(event)
@@ -117,36 +117,20 @@ def basic_parse(target, allow_comments=False, buf_size=64 * 1024,
         yajl.yajl_free(handle)
 
 
-#def parse(file, **kwargs):
-#    '''
-#    Backend-specific wrapper for ijson.common.parse.
-#    '''
-#    return common.parse(basic_parse(file, **kwargs))
-#
-#
-#def items(file, prefix):
-#    '''
-#    Backend-specific wrapper for ijson.common.items.
-#    '''
-#    return common.items(parse(file), prefix)
-
-
 def parse(events_cr, **kwargs):
     '''
-    Backend-specific wrapper for ijson.common.i_parse.
+    Backend-specific wrapper for ijson.common.parse.
     '''
-    return basic_parse(common.i_parse(events_cr), **kwargs)
+    return basic_parse(common.parse(events_cr), **kwargs)
 
 
 def items(prefix, target, **kwargs):
     '''
     Backend-specific wrapper for ijson.common.items.
     '''
-    return parse(common.i_items(prefix, target))
+    return parse(common.items(prefix, target))
 
 
-
-    
 ###
 #  basic_parser -> generator d'events (event, value)
 #  common.parser -> consumer d'events (event, value) / generator de  (prefix, event, value)  

@@ -9,7 +9,6 @@ from importlib import import_module
 
 from ijson import common
 from ijson.backends import yajl2
-from ijson.backends.python import basic_parse
 from ijson.compat import IS_PY2
 from ijson.utils import coroutine
 
@@ -50,15 +49,29 @@ STRINGS_JSON = br'''
     "str4": "\\\\"
 }
 '''
-LIST_JSON = '''[{"id": 5}, {"id": 7}]'''
+LIST_JSON = b'[{"id": 5}, {"id": 7}]'
 
 class Parse(object):
     '''
     Base class for parsing tests that is used to create test cases for each
     available backends.
     '''
+
+    @coroutine
+    def sink(self, rs):
+        try:
+            while True:
+                data = (yield)
+                rs.append(data)
+        except GeneratorExit:
+            pass
+
     def test_basic_parse(self):
-        events = list(self.backend.basic_parse(BytesIO(JSON)))
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                parser.send(BytesIO(JSON).read())
+        
         reference = [
             ('start_map', None),
                 ('map_key', 'docs'),
@@ -111,58 +124,6 @@ class Parse(object):
         thread.start()
         thread.join()
 
-    def test_scalar(self):
-        events = list(self.backend.basic_parse(BytesIO(SCALAR_JSON)))
-        self.assertEqual(events, [('number', 0)])
-
-    def test_strings(self):
-        events = list(self.backend.basic_parse(BytesIO(STRINGS_JSON)))
-        strings = [value for event, value in events if event == 'string']
-        self.assertEqual(strings, ['', '"', '\\', '\\\\'])
-
-    def test_empty(self):
-        self.assertRaises(
-            common.IncompleteJSONError,
-            lambda: list(self.backend.basic_parse(BytesIO(EMPTY_JSON))),
-        )
-
-    def test_incomplete(self):
-        self.assertRaises(
-            common.IncompleteJSONError,
-            lambda: list(self.backend.basic_parse(BytesIO(INCOMPLETE_JSON))),
-        )
-
-    def test_invalid(self):
-        self.assertRaises(
-            common.JSONError,
-            lambda: list(self.backend.basic_parse(BytesIO(INVALID_JSON))),
-        )
-
-    def test_utf8_split(self):
-        buf_size = JSON.index(b'\xd1') + 1
-        try:
-            events = list(self.backend.basic_parse(BytesIO(JSON), buf_size=buf_size))
-        except UnicodeDecodeError:
-            self.fail('UnicodeDecodeError raised')
-
-    def test_lazy(self):
-        # shouldn't fail since iterator is not exhausted
-        self.backend.basic_parse(BytesIO(INVALID_JSON))
-        self.assertTrue(True)
-
-
-class Yajl2Parse(unittest.TestCase):
-
-    backend = yajl2
-
-    @coroutine
-    def sink(self, rs):
-        try:
-            while True:
-                data = (yield)
-                rs.append(data)
-        except GeneratorExit:
-            pass
 
     def test_scalar(self):
         events = []
@@ -179,20 +140,50 @@ class Yajl2Parse(unittest.TestCase):
         strings = [value for event, value in events if event == 'string']
         self.assertEqual(strings, ['', '"', '\\', '\\\\'])
 
-    def test_i_items(self):
+    def test_empty(self):
+        events = []
+        with self.assertRaises(common.IncompleteJSONError):
+            with contextlib.closing(self.sink(events)) as sink_cr:
+                with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                    parser.send(EMPTY_JSON)
 
+    def test_i_items(self):
         events = []
         with contextlib.closing(self.sink(events)) as sink_cr:
-            with contextlib.closing(self.backend.items('item', sink_cr)) as parser:
+            with contextlib.closing(self.backend.items('', sink_cr)) as parser:
                 parser.send(LIST_JSON[:len(LIST_JSON) / 2])
                 parser.send(LIST_JSON[len(LIST_JSON) / 2:])
+        self.assertEqual([{'id': 5}, {'id': 7}], events[0])
 
-        print events
-        import pdb; pdb.set_trace()
+    def test_incomplete(self):
+        events = []
+        with self.assertRaises(common.IncompleteJSONError):
+            with contextlib.closing(self.sink(events)) as sink_cr:
+                with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                    parser.send(INCOMPLETE_JSON)
+
+    def test_invalid(self):
+        events = []
+        with self.assertRaises(common.JSONError):
+            with contextlib.closing(self.sink(events)) as sink_cr:
+                with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                    parser.send(INVALID_JSON)
+ 
+    def test_utf8_split(self):
+        events = []
+        buf_size = JSON.index(b'\xd1') + 1
+        try:
+            with contextlib.closing(self.sink(events)) as sink_cr:
+                with contextlib.closing(self.backend.basic_parse(sink_cr)) as parser:
+                    parser.send(JSON[:buf_size])
+                    parser.send(JSON[buf_size:])
+        except UnicodeDecodeError:
+            self.fail('UnicodeDecodeError raised')
 
 
 # Generating real TestCase classes for each importable backend
-for name in ['python', 'yajl']:
+#for name in ['python', 'yajl']:
+for name in ['yajl2', 'yajl']:
     try:
         classname = '%sParse' % name.capitalize()
         if IS_PY2:
@@ -211,9 +202,25 @@ class Common(unittest.TestCase):
     Backend independent tests. They all use basic_parse imported explicitly from
     the python backend to generate parsing events.
     '''
+
+    @coroutine
+    def sink(self, rs):
+        try:
+            while True:
+                data = (yield)
+                rs.append(data)
+        except GeneratorExit:
+            pass
+
     def test_object_builder(self):
         builder = common.ObjectBuilder()
-        for event, value in basic_parse(BytesIO(JSON)):
+
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(yajl2.basic_parse(sink_cr)) as parser:
+                parser.send(BytesIO(JSON).read())
+
+        for event, value in events:
             builder.event(event, value)
         self.assertEqual(builder.value, {
             'docs': [
@@ -239,13 +246,23 @@ class Common(unittest.TestCase):
         })
 
     def test_scalar_builder(self):
+        events = []
         builder = common.ObjectBuilder()
-        for event, value in basic_parse(BytesIO(SCALAR_JSON)):
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(yajl2.basic_parse(sink_cr)) as parser:
+                parser.send(SCALAR_JSON)
+
+        for event, value in events:
             builder.event(event, value)
         self.assertEqual(builder.value, 0)
 
-    def test_parse(self):       
-        events = common.parse(basic_parse(BytesIO(JSON)))
+    def test_parse(self):
+        events = []
+        builder = common.ObjectBuilder()
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(yajl2.parse(sink_cr)) as parser:
+                parser.send(JSON)
+
         events = [value
             for prefix, event, value in events
             if prefix == 'docs.item.meta.item.item'
@@ -253,9 +270,12 @@ class Common(unittest.TestCase):
         self.assertEqual(events, [1])
 
     def test_items(self):
-        events = basic_parse(BytesIO(JSON))
-        meta = list(common.items(common.parse(events), 'docs.item.meta'))
-        self.assertEqual(meta, [
+        events = []
+        with contextlib.closing(self.sink(events)) as sink_cr:
+            with contextlib.closing(yajl2.items('docs.item.meta', sink_cr)) as parser:
+                parser.send(JSON)
+
+        self.assertEqual(events, [
             [[1], {}],
             {'key': 'value'},
             None,
