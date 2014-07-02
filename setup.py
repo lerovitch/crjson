@@ -2,12 +2,12 @@
 from distutils.core import setup
 
 setup(
-    name = 'ijson',
+    name = 'crjson',
     version = '1.1',
-    author = 'Ivan Sagalaev',
-    author_email = 'maniac@softwaremaniacs.org',
-    packages = ['ijson', 'ijson.backends'],
-    url = 'https://github.com/isagalaev/ijson',
+    author = 'Sergi Sorribas',
+    author_email = 'ssorribas@gmail.com',
+    packages = ['crjson', 'crjson.backends'],
+    url = 'https://github.com/lerovitch/crjson',
     license = 'LICENSE.txt',
     description = 'Iterative JSON parser with a standard Python iterator interface',
     long_description = open('README.rst').read(),

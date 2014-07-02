@@ -7,10 +7,10 @@ import threading
 import contextlib
 from importlib import import_module
 
-from ijson import common
-from ijson.backends import yajl2
-from ijson.compat import IS_PY2
-from ijson.utils import coroutine
+from crjson import common
+from crjson.backends import yajl2
+from crjson.compat import IS_PY2
+from crjson.utils import coroutine
 
 
 JSON = b'''
@@ -191,7 +191,7 @@ for name in ['yajl2', 'yajl']:
         locals()[classname] = type(
             classname,
             (unittest.TestCase, Parse),
-            {'backend': import_module('ijson.backends.%s' % name)},
+            {'backend': import_module('crjson.backends.%s' % name)},
         )
     except ImportError:
         pass

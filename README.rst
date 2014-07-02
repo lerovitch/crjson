@@ -1,8 +1,8 @@
 =====
-ijson
+crjson
 =====
 
-Ijson is an iterative JSON parser using Python couroutines interface.
+crjson is an iterative JSON parser using Python couroutines interface.
 
 It is a fork from  `Ivan Sagalaev <https://github.com/isagalaev>` library that justs rethinks the 
 flow from a generator library to a coroutine library.
@@ -30,13 +30,13 @@ objects::
       }
     }
 
-Most common usage is having ijson yield native Python objects out of a JSON
+Most common usage is having crjson yield native Python objects out of a JSON
 stream located under a prefix. Here's how to process all European cities::
 
-    import ijson
+    import crjson
     import contextlib
 
-    @ijson.util    
+    @crjson.util    
     def sink(rs):
         try:
             while True:
@@ -69,7 +69,7 @@ stream located under a prefix. Here's how to process all European cities::
         ''')
 
     with contextlib.closing(sink(objects)) as sink_cr:
-        with contextlib.closing(ijson.items('earth.europe.item', sink_cr)) as parser:
+        with contextlib.closing(crjson.items('earth.europe.item', sink_cr)) as parser:
             reader(f, parser)
 
     cities = (o for o in objects if o['type'] == 'city')
@@ -81,7 +81,7 @@ Backends
 ========
 
 Ijson provides several implementations of the actual parsing in the form of
-backends located in ijson/backends:
+backends located in crjson/backends:
 
 - ``yajl2``: wrapper around `YAJL <http://lloyd.github.com/yajl/>`_ version 2.x
 - ``yajl``: wrapper around `YAJL <http://lloyd.github.com/yajl/>`_ version 1.x
@@ -89,19 +89,19 @@ backends located in ijson/backends:
 You can import a specific backend and use it in the same way as the top level
 library::
 
-    import ijson.backends.yajl as ijson
+    import crjson.backends.yajl as crjson
 
-    for item in ijson.items(...):
+    for item in crjson.items(...):
         # ...
 
-Importing the top level library as ``import ijson`` tries to import all backends
+Importing the top level library as ``import crjson`` tries to import all backends
 in order, so it either finds an appropriate version of YAJL.
 
 
 Acknowledgements
 ================
 
-Python parser in ijson is relatively simple thanks to `Douglas Crockford
+Python parser in crjson is relatively simple thanks to `Douglas Crockford
 <http://www.crockford.com/>`_ who invented a strict, easy to parse syntax.
 
 The `YAJL <http://lloyd.github.com/yajl/>`_ library by `Lloyd Hilaiel
