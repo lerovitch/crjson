@@ -49,7 +49,7 @@ STRINGS_JSON = br'''
     "str4": "\\\\"
 }
 '''
-LIST_JSON = b'[{"id": 5}, {"id": 7}]'
+LIST_JSON = b'[{"id": 5}, {"id": 6}, {"id": 7}]'
 
 class Parse(object):
     '''
@@ -150,10 +150,11 @@ class Parse(object):
     def test_i_items(self):
         events = []
         with contextlib.closing(self.sink(events)) as sink_cr:
-            with contextlib.closing(self.backend.items('', sink_cr)) as parser:
+            with contextlib.closing(self.backend.items('item', sink_cr)) as parser:
                 parser.send(LIST_JSON[:len(LIST_JSON) / 2])
+                self.assertEqual([{'id': 5}], events)
                 parser.send(LIST_JSON[len(LIST_JSON) / 2:])
-        self.assertEqual([{'id': 5}, {'id': 7}], events[0])
+            self.assertEqual([{'id': 5}, {'id': 6}, {'id': 7}], events)
 
     def test_incomplete(self):
         events = []
