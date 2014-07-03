@@ -36,7 +36,7 @@ stream located under a prefix. Here's how to process all European cities::
     import crjson
     import contextlib
 
-    @crjson.util    
+    @crjson.utils.coroutine
     def sink(rs):
         try:
             while True:
@@ -73,8 +73,8 @@ stream located under a prefix. Here's how to process all European cities::
             reader(f, parser)
 
     cities = (o for o in objects if o['type'] == 'city')
-        for city in cities:
-            print city
+    for city in cities:
+        print city
 
 
 Backends
